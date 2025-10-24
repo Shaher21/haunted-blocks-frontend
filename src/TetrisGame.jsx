@@ -58,6 +58,9 @@ tetrisSound.volume = 0.8;
 const gameOverSound = new Audio("/assets/gameover.mp3");
 gameOverSound.volume = 0.9;
 
+const thunderSound = new Audio("/assets/thunder.mp3");
+thunderSound.volume = 0.8;
+
 const createEmptyBoard = () =>
   Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 
@@ -85,8 +88,9 @@ export default function TetrisGame() {
   const [walletAddress, setWalletAddress] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [muted, setMuted] = useState(() => localStorage.getItem("muted") === "true");
+  const [showIntro, setShowIntro] = useState(true);
 
-  const adminWallet = "0x6682e83B7Ad638379f5Cad6F56627Fc3EEb49115";
+  const adminWallet = "0x619fAd7514e9AE65c5fDE00b4bEa79721f557612";
 
   const [textures] = useState(() => {
     const o = {};
@@ -97,6 +101,13 @@ export default function TetrisGame() {
     });
     return o;
   });
+
+  useEffect(() => {
+    // Intro splash for 3s
+    const timer = setTimeout(() => setShowIntro(false), 3000);
+    if (!muted) thunderSound.play();
+    return () => clearTimeout(timer);
+  }, [muted]);
 
   const collide = (p, b) =>
     p.shape.some((r, y) =>
@@ -272,12 +283,41 @@ export default function TetrisGame() {
     let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\n\n";
     data.forEach((item, i) => {
       const m = i === 0 ? "🥇 " : i === 1 ? "🥈 " : i === 2 ? "🥉 " : `${i + 1}. `;
-      msg += `${m}${item.walletAddress.slice(0, 6)}...${item.walletAddress.slice(
-        -4
-      )} — ${item.score}\n`;
+      msg += `${m}${item.walletAddress} — ${item.score}\n`;
     });
     alert(msg);
   };
+
+  if (showIntro)
+    return (
+      <div
+        style={{
+          backgroundColor: "black",
+          color: "orange",
+          fontSize: 50,
+          height: "100vh",
+          width: "100vw",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: "bold",
+          textShadow: "0 0 20px orange",
+          animation: "flicker 1.5s infinite",
+        }}
+      >
+        🦇🎃 Haunted Blocks 👻🕸️
+        <style>{`
+          @keyframes flicker {
+            0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+              opacity: 1;
+            }
+            20%, 24%, 55% {
+              opacity: 0.4;
+            }
+          }
+        `}</style>
+      </div>
+    );
 
   return (
     <div
@@ -463,7 +503,6 @@ export default function TetrisGame() {
           </div>
         </div>
 
-        {/* Game Over Overlay */}
         {gameOver && (
           <div
             style={{
