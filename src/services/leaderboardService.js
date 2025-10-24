@@ -1,65 +1,48 @@
-import { db } from "../firebaseConfig";
-import {
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  orderBy,
-  limit,
-  updateDoc,
-  doc,
-  deleteDoc,
-} from "firebase/firestore";
+// src/services/leaderboardService.js
 
-const leaderboardRef = collection(db, "leaderboard");
-
-// Save only the highest score per wallet
+// Save only the highest score per wallet through your Vercel API
 export async function saveScore(walletAddress, score) {
   try {
-    const snapshot = await getDocs(query(leaderboardRef));
-    let existingEntry = null;
-    snapshot.forEach((docSnap) => {
-      if (docSnap.data().walletAddress === walletAddress) {
-        existingEntry = { id: docSnap.id, ...docSnap.data() };
-      }
+    const response = await fetch("/api/submitScore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress, score }),
     });
-
-    if (existingEntry) {
-      if (score > existingEntry.score) {
-        const playerDoc = doc(db, "leaderboard", existingEntry.id);
-        await updateDoc(playerDoc, { score, timestamp: new Date() });
-        console.log("✅ Updated high score:", score);
-      } else {
-        console.log("⚠️ New score is lower — not updating.");
-      }
-    } else {
-      await addDoc(leaderboardRef, {
-        walletAddress,
-        score,
-        timestamp: new Date(),
-      });
-      console.log("🏆 New player added!");
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(err);
     }
+    console.log("🏆 Score submitted successfully!");
   } catch (e) {
-    console.error("Error saving score: ", e);
+    console.error("Error saving score:", e);
   }
 }
 
-// Load top 10 high scores
+// Load leaderboard (mocked locally until backend persistence is added)
+let cachedLeaderboard = [];
+
 export async function getLeaderboard() {
-  const q = query(leaderboardRef, orderBy("score", "desc"), limit(10));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => doc.data());
+  try {
+    // For now, fetch from in-memory store on Vercel (same endpoint will serve soon)
+    const res = await fetch("/api/leaderboard");
+    if (res.ok) {
+      cachedLeaderboard = await res.json();
+    }
+  } catch {
+    console.log("⚠️ Leaderboard service not yet implemented, using cache");
+  }
+  return cachedLeaderboard.sort((a, b) => b.score - a.score).slice(0, 10);
 }
 
-// Delete all scores
+// Reset leaderboard (only works for admin wallet)
 export async function resetLeaderboard() {
   try {
-    const snapshot = await getDocs(leaderboardRef);
-    for (const docSnap of snapshot.docs) {
-      await deleteDoc(docSnap.ref);
+    const response = await fetch("/api/resetLeaderboard", { method: "POST" });
+    if (response.ok) {
+      console.log("🔥 Leaderboard has been reset!");
+    } else {
+      console.warn("⚠️ Reset failed");
     }
-    console.log("🔥 Leaderboard has been reset!");
   } catch (e) {
     console.error("Error resetting leaderboard:", e);
   }
