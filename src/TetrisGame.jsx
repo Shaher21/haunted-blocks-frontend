@@ -103,11 +103,21 @@ export default function TetrisGame() {
   });
 
   useEffect(() => {
-    // Intro splash for 3s
-    const timer = setTimeout(() => setShowIntro(false), 3000);
-    if (!muted) thunderSound.play();
-    return () => clearTimeout(timer);
-  }, [muted]);
+  // Intro splash for 3s
+  const timer = setTimeout(() => setShowIntro(false), 3000);
+
+  // 🎧 Small delay to bypass autoplay restrictions
+  if (!muted) {
+    setTimeout(() => {
+      thunderSound.currentTime = 0;
+      thunderSound.play().catch(() => {
+        console.log("Thunder sound blocked until user interacts");
+      });
+    }, 200);
+  }
+
+  return () => clearTimeout(timer);
+}, [muted]);
 
   const collide = (p, b) =>
     p.shape.some((r, y) =>
