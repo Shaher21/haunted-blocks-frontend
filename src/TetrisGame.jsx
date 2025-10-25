@@ -58,8 +58,11 @@ tetrisSound.volume = 0.8;
 const gameOverSound = new Audio("/assets/gameover.mp3");
 gameOverSound.volume = 0.9;
 
-const thunderSound = new Audio("/assets/thunder.mp3");
-thunderSound.volume = 0.8;
+const rotateSound = new Audio("/assets/rotate.mp3");
+rotateSound.volume = 0.6;
+
+const clearSound = new Audio("/assets/clear.mp3");
+clearSound.volume = 0.7;
 
 const createEmptyBoard = () =>
   Array.from({ length: ROWS }, () => Array(COLS).fill(null));
@@ -88,7 +91,6 @@ export default function TetrisGame() {
   const [walletAddress, setWalletAddress] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [muted, setMuted] = useState(() => localStorage.getItem("muted") === "true");
-  const [showIntro, setShowIntro] = useState(true);
 
   const adminWallet = "0x619fAd7514e9AE65c5fDE00b4bEa79721f557612";
 
@@ -101,23 +103,6 @@ export default function TetrisGame() {
     });
     return o;
   });
-
-  useEffect(() => {
-  // Intro splash for 3s
-  const timer = setTimeout(() => setShowIntro(false), 3000);
-
-  // 🎧 Small delay to bypass autoplay restrictions
-  if (!muted) {
-    setTimeout(() => {
-      thunderSound.currentTime = 0;
-      thunderSound.play().catch(() => {
-        console.log("Thunder sound blocked until user interacts");
-      });
-    }, 200);
-  }
-
-  return () => clearTimeout(timer);
-}, [muted]);
 
   const collide = (p, b) =>
     p.shape.some((r, y) =>
@@ -157,7 +142,10 @@ export default function TetrisGame() {
       merged = [...empty, ...filtered];
       if (cleared > 0) {
         setScore((s) => s + cleared * 100);
-        if (cleared === 4 && !muted) tetrisSound.play();
+        if (!muted) {
+          clearSound.play();
+          if (cleared === 4) tetrisSound.play();
+        }
       }
       const next = nextPiece;
       if (collide(next, merged)) {
@@ -224,7 +212,10 @@ export default function TetrisGame() {
           .map((_, i) => current.shape.map((r) => r[i]))
           .reverse();
         const r = { ...current, shape: rotated };
-        if (!collide(r, board)) setCurrent(r);
+        if (!collide(r, board)) {
+          setCurrent(r);
+          if (!muted) rotateSound.play();
+        }
       }
     };
     window.addEventListener("keydown", handleKey, { passive: false });
@@ -298,37 +289,6 @@ export default function TetrisGame() {
     alert(msg);
   };
 
-  if (showIntro)
-    return (
-      <div
-        style={{
-          backgroundColor: "black",
-          color: "orange",
-          fontSize: 50,
-          height: "100vh",
-          width: "100vw",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: "bold",
-          textShadow: "0 0 20px orange",
-          animation: "flicker 1.5s infinite",
-        }}
-      >
-        🦇🎃 Haunted Blocks 👻🕸️
-        <style>{`
-          @keyframes flicker {
-            0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
-              opacity: 1;
-            }
-            20%, 24%, 55% {
-              opacity: 0.4;
-            }
-          }
-        `}</style>
-      </div>
-    );
-
   return (
     <div
       style={{
@@ -372,7 +332,6 @@ export default function TetrisGame() {
         Use arrow keys to move and rotate blocks. Fill rows to clear them!
       </p>
 
-      {/* Top Buttons */}
       <div style={{ position: "absolute", top: 20, left: 20 }}>
         <button
           onClick={showLeaderboard}
@@ -431,7 +390,6 @@ export default function TetrisGame() {
         )}
       </div>
 
-      {/* 🔊 Mute Button */}
       <div style={{ position: "absolute", top: 20, right: 20, fontSize: 24 }}>
         <span
           onClick={toggleMute}
@@ -460,7 +418,6 @@ export default function TetrisGame() {
         </div>
       )}
 
-      {/* Game + Score Box */}
       <div style={{ position: "relative", marginTop: "20px" }}>
         <canvas
           ref={canvasRef}
