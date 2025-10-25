@@ -1,49 +1,74 @@
-// src/services/leaderboardService.js
+// ✅ Safe browser-compatible Upstash client
+import { Redis } from "@upstash/redis/cloudflare";
 
-// Save only the highest score per wallet through your Vercel API
+// Connect using environment variables
+const redis = new Redis({
+  url: import.meta.env.VITE_UPSTASH_REDIS_REST_URL,
+  token: import.meta.env.VITE_UPSTASH_REDIS_REST_TOKEN,
+});
+
+// 🧹 Helper: Sort leaderboard data
+function sortLeaderboard(data) {
+  return Object.entries(data)
+    .map(([walletAddress, score]) => ({ walletAddress, score }))
+    .sort((a, b) => b.score - a.score);
+}
+
+// 🏆 Save only the highest score per wallet (anti-cheat protection)
 export async function saveScore(walletAddress, score) {
   try {
-    const response = await fetch("/api/submitScore", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ walletAddress, score }),
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(err);
+    if (!walletAddress || typeof score !== "number") {
+      console.warn("⚠️ Invalid data. Score not saved.");
+      return;
     }
-    console.log("🏆 Score submitted successfully!");
-  } catch (e) {
-    console.error("Error saving score:", e);
+
+    // Simple anti-cheat: ignore unrealistic spikes (> 100000)
+    if (score > 100000) {
+      console.warn("🚫 Suspicious score ignored:", score);
+      return;
+    }
+
+    const existing = await redis.get(`player:${walletAddress}`);
+
+    if (!existing || score > existing) {
+      await redis.set(`player:${walletAddress}`, score);
+      console.log(`✅ New high score saved for ${walletAddress}: ${score}`);
+    } else {
+      console.log(`⚠️ Lower score ignored for ${walletAddress}: ${score}`);
+    }
+  } catch (err) {
+    console.error("❌ Error saving score:", err);
   }
 }
 
-// Load leaderboard (mocked locally until backend persistence is added)
-let cachedLeaderboard = [];
-
+// 📜 Get leaderboard top 10 (safe + sorted)
 export async function getLeaderboard() {
   try {
-    // For now, fetch from in-memory store on Vercel (same endpoint will serve soon)
-    const res = await fetch("/api/leaderboard");
-    if (res.ok) {
-      cachedLeaderboard = await res.json();
+    const keys = await redis.keys("player:*");
+    const all = {};
+
+    for (const key of keys) {
+      const wallet = key.replace("player:", "");
+      const score = await redis.get(key);
+      all[wallet] = Number(score);
     }
-  } catch {
-    console.log("⚠️ Leaderboard service not yet implemented, using cache");
+
+    return sortLeaderboard(all).slice(0, 10);
+  } catch (err) {
+    console.error("❌ Error getting leaderboard:", err);
+    return [];
   }
-  return cachedLeaderboard.sort((a, b) => b.score - a.score).slice(0, 10);
 }
 
-// Reset leaderboard (only works for admin wallet)
+// 🔥 Admin-only: reset all scores
 export async function resetLeaderboard() {
   try {
-    const response = await fetch("/api/resetLeaderboard", { method: "POST" });
-    if (response.ok) {
-      console.log("🔥 Leaderboard has been reset!");
-    } else {
-      console.warn("⚠️ Reset failed");
+    const keys = await redis.keys("player:*");
+    for (const key of keys) {
+      await redis.del(key);
     }
-  } catch (e) {
-    console.error("Error resetting leaderboard:", e);
+    console.log("🔥 Leaderboard cleared!");
+  } catch (err) {
+    console.error("❌ Error resetting leaderboard:", err);
   }
 }
