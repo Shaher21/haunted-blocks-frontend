@@ -82,15 +82,17 @@ const randomPiece = () => {
 
 export default function TetrisGame() {
   const canvasRef = useRef(null);
-  const [board, setBoard] = useState(createEmptyBoard());
-  const [current, setCurrent] = useState(randomPiece());
+  const nextRef = useRef(null);
+  const boardRef = useRef(createEmptyBoard());
+  const pieceRef = useRef(randomPiece());
+  const [board, setBoard] = useState(boardRef.current);
   const [nextPiece, setNextPiece] = useState(randomPiece());
   const [running, setRunning] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [walletAddress, setWalletAddress] = useState(null);
-  const [leaderboard, setLeaderboard] = useState([]);
   const [muted, setMuted] = useState(() => localStorage.getItem("muted") === "true");
+  const [scale, setScale] = useState(Math.min(window.innerHeight / 800, 1));
 
   const adminWallet = "0x619fAd7514e9AE65c5fDE00b4bEa79721f557612";
 
@@ -133,135 +135,186 @@ export default function TetrisGame() {
     return [empty, newB, cleared];
   };
 
-  const drop = async () => {
-    if (!running) return;
-    const moved = { ...current, y: current.y + 1 };
-    if (collide(moved, board)) {
-      let merged = mergePiece(current, board);
-      const [empty, filtered, cleared] = removeFullRows(merged);
-      merged = [...empty, ...filtered];
-      if (cleared > 0) {
-        setScore((s) => s + cleared * 100);
-        if (!muted) {
-          clearSound.play();
-          if (cleared === 4) tetrisSound.play();
-        }
-      }
-      const next = nextPiece;
-      if (collide(next, merged)) {
-        if (!muted) {
-          bgMusic.pause();
-          gameOverSound.play();
-        } else bgMusic.pause();
-        setRunning(false);
-        setGameOver(true);
-        if (walletAddress) await saveScore(walletAddress, score);
-      } else {
-        setBoard(merged);
-        setCurrent(next);
-        setNextPiece(randomPiece());
-      }
-    } else setCurrent(moved);
+  const drawNextPiece = () => {
+    const canvas = nextRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, 120, 120);
+    const bs = 20;
+    const offsetX = (120 - nextPiece.shape[0].length * bs) / 2;
+    const offsetY = (120 - nextPiece.shape.length * bs) / 2;
+    nextPiece.shape.forEach((r, y) =>
+      r.forEach((c, x) => {
+        if (c && textures[nextPiece.color]?.complete)
+          ctx.drawImage(
+            textures[nextPiece.color],
+            offsetX + x * bs,
+            offsetY + y * bs,
+            bs,
+            bs
+          );
+      })
+    );
   };
 
+  useEffect(drawNextPiece, [nextPiece, textures]);
+
+  // 🕹️ Gravity loop
+  useEffect(() => {
+    if (!running) return;
+    let frame;
+
+    const tick = () => {
+      const baseSpeed = 600;
+      const speed = Math.max(150, baseSpeed - Math.floor(score / 300) * 50);
+      const current = pieceRef.current;
+      const moved = { ...current, y: current.y + 1 };
+      const board = boardRef.current;
+
+      if (collide(moved, board)) {
+        let merged = mergePiece(current, board);
+        const [empty, filtered, cleared] = removeFullRows(merged);
+        merged = [...empty, ...filtered];
+        boardRef.current = merged;
+        setBoard(merged);
+
+        if (cleared > 0) {
+          setScore((s) => s + cleared * 100);
+          if (!muted) {
+            clearSound.play();
+            if (cleared === 4) tetrisSound.play();
+          }
+        }
+
+        const next = nextPiece;
+        if (collide(next, merged)) {
+          if (!muted) {
+            bgMusic.pause();
+            gameOverSound.play();
+          } else bgMusic.pause();
+          setRunning(false);
+          setGameOver(true);
+          if (walletAddress) saveScore(walletAddress, score);
+          cancelAnimationFrame(frame);
+          return;
+        } else {
+          pieceRef.current = next;
+          setNextPiece(randomPiece());
+        }
+      } else {
+        pieceRef.current = moved;
+      }
+
+      frame = setTimeout(tick, Math.max(150, 600 - Math.floor(score / 300) * 50));
+    };
+
+    frame = setTimeout(tick, 600);
+    return () => clearTimeout(frame);
+  }, [running, nextPiece, score]);
+
+  // 🎨 Render board and active piece
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
-    board.forEach((r, y) =>
-      r.forEach((c, x) => {
-        if (c && textures[c]?.complete)
-          ctx.drawImage(
-            textures[c],
-            x * BLOCK_SIZE,
-            y * BLOCK_SIZE,
-            BLOCK_SIZE,
-            BLOCK_SIZE
-          );
-      })
-    );
-    current.shape.forEach((r, y) =>
-      r.forEach((c, x) => {
-        if (c && textures[current.color]?.complete)
-          ctx.drawImage(
-            textures[current.color],
-            (current.x + x) * BLOCK_SIZE,
-            (current.y + y) * BLOCK_SIZE,
-            BLOCK_SIZE,
-            BLOCK_SIZE
-          );
-      })
-    );
-  }, [board, current]);
+    const draw = () => {
+      ctx.clearRect(0, 0, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+      const b = boardRef.current;
+      const p = pieceRef.current;
 
+      b.forEach((r, y) =>
+        r.forEach((c, x) => {
+          if (c && textures[c]?.complete)
+            ctx.drawImage(
+              textures[c],
+              x * BLOCK_SIZE,
+              y * BLOCK_SIZE,
+              BLOCK_SIZE,
+              BLOCK_SIZE
+            );
+        })
+      );
+
+      p.shape.forEach((r, y) =>
+        r.forEach((c, x) => {
+          if (c && textures[p.color]?.complete)
+            ctx.drawImage(
+              textures[p.color],
+              (p.x + x) * BLOCK_SIZE,
+              (p.y + y) * BLOCK_SIZE,
+              BLOCK_SIZE,
+              BLOCK_SIZE
+            );
+        })
+      );
+      requestAnimationFrame(draw);
+    };
+    requestAnimationFrame(draw);
+  }, [textures]);
+
+  // 🚫 Prevent page scrolling when using arrow keys
   useEffect(() => {
-    const handleKey = (e) => {
-      if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp"].includes(e.key))
+    const preventScroll = (e) => {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.key)) {
         e.preventDefault();
+      }
+    };
+
+    const handleKey = (e) => {
       if (!running) return;
+
+      const current = pieceRef.current;
+      const board = boardRef.current;
+
       if (e.key === "ArrowLeft") {
         const m = { ...current, x: current.x - 1 };
-        if (!collide(m, board)) setCurrent(m);
+        if (!collide(m, board)) pieceRef.current = m;
       } else if (e.key === "ArrowRight") {
         const m = { ...current, x: current.x + 1 };
-        if (!collide(m, board)) setCurrent(m);
+        if (!collide(m, board)) pieceRef.current = m;
       } else if (e.key === "ArrowDown") {
-        drop();
+        const m = { ...current, y: current.y + 1 };
+        if (!collide(m, board)) pieceRef.current = m;
       } else if (e.key === "ArrowUp") {
         const rotated = current.shape[0]
           .map((_, i) => current.shape.map((r) => r[i]))
           .reverse();
         const r = { ...current, shape: rotated };
         if (!collide(r, board)) {
-          setCurrent(r);
+          pieceRef.current = r;
           if (!muted) rotateSound.play();
         }
       }
     };
+
+    window.addEventListener("keydown", preventScroll, { passive: false });
     window.addEventListener("keydown", handleKey, { passive: false });
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [current, board, running]);
 
-  useEffect(() => {
-    const canvas = document.getElementById("next-piece");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, 120, 120);
-    const bs = 20;
-    nextPiece.shape.forEach((r, y) =>
-      r.forEach((c, x) => {
-        if (c && textures[nextPiece.color]?.complete)
-          ctx.drawImage(
-            textures[nextPiece.color],
-            x * bs + 40,
-            y * bs + 40,
-            bs,
-            bs
-          );
-      })
-    );
-  }, [nextPiece, textures]);
+    return () => {
+      window.removeEventListener("keydown", preventScroll);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [running, muted]);
 
+  // ⚖️ Dynamic scaling
   useEffect(() => {
-    if (!running) return;
-    const baseSpeed = 600;
-    const speed = Math.max(150, baseSpeed - Math.floor(score / 300) * 50);
-    const interval = setInterval(drop, speed);
-    return () => clearInterval(interval);
-  }, [running, board, current, score]);
+    const handleResize = () => setScale(Math.min(window.innerHeight / 800, 1));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const startGame = () => {
-    if (!muted) {
-      bgMusic.currentTime = 0;
-      bgMusic.play();
-    }
-    setBoard(createEmptyBoard());
-    setCurrent(randomPiece());
+    boardRef.current = createEmptyBoard();
+    pieceRef.current = randomPiece();
+    setBoard(boardRef.current);
     setNextPiece(randomPiece());
     setScore(0);
     setGameOver(false);
     setRunning(true);
+    if (!muted) {
+      bgMusic.currentTime = 0;
+      bgMusic.play();
+    }
+    drawNextPiece();
   };
 
   const connectWallet = async () => {
@@ -280,7 +333,6 @@ export default function TetrisGame() {
 
   const showLeaderboard = async () => {
     const data = await getLeaderboard();
-    setLeaderboard(data);
     let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\n\n";
     data.forEach((item, i) => {
       const m = i === 0 ? "🥇 " : i === 1 ? "🥈 " : i === 2 ? "🥉 " : `${i + 1}. `;
@@ -297,38 +349,22 @@ export default function TetrisGame() {
         backgroundImage: "url('/assets/background.png')",
         backgroundSize: "cover",
         backgroundPosition: "center",
-        height: "100vh",
+        height: "100%",
+        minHeight: "100vh",
         width: "100vw",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         paddingTop: "20px",
-        overflow: "hidden",
-        position: "fixed",
+        overflow: "auto",
+        position: "relative",
       }}
     >
-      <h1
-        style={{
-          color: "orange",
-          fontSize: 50,
-          textShadow: "2px 2px black",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-        }}
-      >
+      <h1 style={{ color: "orange", fontSize: 50, textShadow: "2px 2px black" }}>
         🦇🎃 Haunted Blocks 👻🕸️
       </h1>
 
-      <p
-        style={{
-          fontSize: "18px",
-          color: "white",
-          textShadow: "1px 1px black",
-          marginTop: "5px",
-          marginBottom: "15px",
-        }}
-      >
+      <p style={{ color: "white", textShadow: "1px 1px black" }}>
         Use arrow keys to move and rotate blocks. Fill rows to clear them!
       </p>
 
@@ -341,8 +377,6 @@ export default function TetrisGame() {
             border: "none",
             borderRadius: "8px",
             cursor: "pointer",
-            color: "black",
-            fontWeight: "bold",
           }}
         >
           Leaderboard
@@ -369,8 +403,7 @@ export default function TetrisGame() {
         {walletAddress?.toLowerCase() === adminWallet.toLowerCase() && (
           <button
             onClick={async () => {
-              const c = confirm("⚠️ Reset all scores?");
-              if (c) {
+              if (confirm("⚠️ Reset all scores?")) {
                 await resetLeaderboard();
                 alert("🔥 Leaderboard cleared!");
               }
@@ -391,10 +424,7 @@ export default function TetrisGame() {
       </div>
 
       <div style={{ position: "absolute", top: 20, right: 20, fontSize: 24 }}>
-        <span
-          onClick={toggleMute}
-          style={{ cursor: "pointer", userSelect: "none" }}
-        >
+        <span onClick={toggleMute} style={{ cursor: "pointer", userSelect: "none" }}>
           {muted ? "🔇" : "🔊"}
         </span>
       </div>
@@ -418,7 +448,15 @@ export default function TetrisGame() {
         </div>
       )}
 
-      <div style={{ position: "relative", marginTop: "20px" }}>
+      {/* 🎮 Game Area */}
+      <div
+        style={{
+          position: "relative",
+          marginTop: "20px",
+          transform: `scale(${scale})`,
+          transformOrigin: "top center",
+        }}
+      >
         <canvas
           ref={canvasRef}
           width={COLS * BLOCK_SIZE}
@@ -430,6 +468,7 @@ export default function TetrisGame() {
           }}
         />
 
+        {/* 🧩 Next piece + score */}
         <div
           style={{
             position: "absolute",
@@ -448,28 +487,19 @@ export default function TetrisGame() {
             Score: {score}
           </div>
 
-          <div
+          <canvas
+            ref={nextRef}
+            width="120"
+            height="120"
             style={{
+              backgroundColor: "black",
               marginTop: "10px",
-              backgroundColor: "rgba(20,20,20,0.9)",
               border: "1px solid orange",
-              width: "120px",
-              height: "120px",
-              margin: "auto",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
             }}
-          >
-            <canvas
-              id="next-piece"
-              width="120"
-              height="120"
-              style={{ backgroundColor: "black" }}
-            ></canvas>
-          </div>
+          ></canvas>
         </div>
 
+        {/* 👻 Game Over */}
         {gameOver && (
           <div
             style={{
