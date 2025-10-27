@@ -179,10 +179,13 @@ export default function TetrisGame() {
         setBoard(merged);
 
         if (cleared > 0) {
-          setScore((s) => s + cleared * 100);
-          if (!muted) {
-            clearSound.play();
-            if (cleared === 4) tetrisSound.play();
+          let points = cleared * 100;
+          if (cleared === 4) points += 600; // 💎 bonus for Tetris!
+           setScore((s) => s + points);
+
+        if (!muted) {
+          clearSound.play();
+          if (cleared === 4) tetrisSound.play();
           }
         }
 
