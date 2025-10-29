@@ -181,11 +181,11 @@ export default function TetrisGame() {
         if (cleared > 0) {
           let points = cleared * 100;
           if (cleared === 4) points += 600; // 💎 bonus for Tetris!
-           setScore((s) => s + points);
+          setScore((s) => s + points);
 
-        if (!muted) {
-          clearSound.play();
-          if (cleared === 4) tetrisSound.play();
+          if (!muted) {
+            clearSound.play();
+            if (cleared === 4) tetrisSound.play();
           }
         }
 
@@ -257,7 +257,7 @@ export default function TetrisGame() {
   // 🚫 Prevent page scrolling when using arrow keys
   useEffect(() => {
     const preventScroll = (e) => {
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.key)) {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
         e.preventDefault();
       }
     };
@@ -286,6 +286,13 @@ export default function TetrisGame() {
           pieceRef.current = r;
           if (!muted) rotateSound.play();
         }
+      } else if (e.key === " ") {
+        // Instant drop
+        let m = { ...current };
+        while (!collide({ ...m, y: m.y + 1 }, board)) {
+          m.y++;
+        }
+        pieceRef.current = m;
       }
     };
 
@@ -368,9 +375,10 @@ export default function TetrisGame() {
       </h1>
 
       <p style={{ color: "white", textShadow: "1px 1px black" }}>
-        Use arrow keys to move and rotate blocks. Fill rows to clear them!
+        Use arrow keys to move and rotate blocks. Press spacebar to instantly drop!
       </p>
 
+      {/* Buttons and Game Area */}
       <div style={{ position: "absolute", top: 20, left: 20 }}>
         <button
           onClick={showLeaderboard}
@@ -451,7 +459,7 @@ export default function TetrisGame() {
         </div>
       )}
 
-      {/* 🎮 Game Area */}
+      {/* Game Canvas and Score */}
       <div
         style={{
           position: "relative",
@@ -471,7 +479,6 @@ export default function TetrisGame() {
           }}
         />
 
-        {/* 🧩 Next piece + score */}
         <div
           style={{
             position: "absolute",
@@ -502,8 +509,7 @@ export default function TetrisGame() {
           ></canvas>
         </div>
 
-        {/* 👻 Game Over */}
-        {gameOver && (
+ {gameOver && (
           <div
             style={{
               position: "absolute",
