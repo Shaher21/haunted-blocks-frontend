@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  saveScore,
-  getLeaderboard,
-  resetLeaderboard,
-} from "./services/leaderboardService";
+import { saveScore, getLeaderboard, resetLeaderboard } from "./services/leaderboardService";
+
+/* Full Haunted Blocks with Combo Multiplier + Instant Drop
+   Features:
+   - Combo multipliers for consecutive clears (up to ×2)
+   - Tetris = 600 base points
+   - Instant drop with spacebar
+   - Updated how-to-play text
+*/
 
 const COLS = 10;
 const ROWS = 20;
@@ -11,32 +15,12 @@ const BLOCK_SIZE = 30;
 
 const SHAPES = {
   I: [[1, 1, 1, 1]],
-  O: [
-    [1, 1],
-    [1, 1],
-  ],
-  T: [
-    [0, 1, 0],
-    [1, 1, 1],
-  ],
-  L: [
-    [1, 0],
-    [1, 0],
-    [1, 1],
-  ],
-  J: [
-    [0, 1],
-    [0, 1],
-    [1, 1],
-  ],
-  S: [
-    [0, 1, 1],
-    [1, 1, 0],
-  ],
-  Z: [
-    [1, 1, 0],
-    [0, 1, 1],
-  ],
+  O: [[1, 1], [1, 1]],
+  T: [[0, 1, 0], [1, 1, 1]],
+  L: [[1, 0], [1, 0], [1, 1]],
+  J: [[0, 1], [0, 1], [1, 1]],
+  S: [[0, 1, 1], [1, 1, 0]],
+  Z: [[1, 1, 0], [0, 1, 1]],
 };
 
 const TYPES = ["pumpkin", "bat", "ghost", "skull"];
@@ -51,21 +35,16 @@ const TEXTURE_PATHS = {
 const bgMusic = new Audio("/assets/music.mp3");
 bgMusic.loop = true;
 bgMusic.volume = 0.4;
-
 const tetrisSound = new Audio("/assets/tetris.mp3");
 tetrisSound.volume = 0.8;
-
 const gameOverSound = new Audio("/assets/gameover.mp3");
 gameOverSound.volume = 0.9;
-
 const rotateSound = new Audio("/assets/rotate.mp3");
 rotateSound.volume = 0.6;
-
 const clearSound = new Audio("/assets/clear.mp3");
 clearSound.volume = 0.7;
 
-const createEmptyBoard = () =>
-  Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+const createEmptyBoard = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 
 const randomPiece = () => {
   const keys = Object.keys(SHAPES);
@@ -85,6 +64,8 @@ export default function TetrisGame() {
   const nextRef = useRef(null);
   const boardRef = useRef(createEmptyBoard());
   const pieceRef = useRef(randomPiece());
+  const comboRef = useRef(0);
+
   const [board, setBoard] = useState(boardRef.current);
   const [nextPiece, setNextPiece] = useState(randomPiece());
   const [running, setRunning] = useState(false);
@@ -156,17 +137,16 @@ export default function TetrisGame() {
       })
     );
   };
-
   useEffect(drawNextPiece, [nextPiece, textures]);
 
-  // 🕹️ Gravity loop
+  // 🕹️ Gravity loop with combo
   useEffect(() => {
     if (!running) return;
     let frame;
 
     const tick = () => {
       const baseSpeed = 600;
-      const speed = Math.max(150, baseSpeed - Math.floor(score / 300) * 50);
+      const speed = Math.max(150, baseSpeed - Math.floor(score / 500) * 50);
       const current = pieceRef.current;
       const moved = { ...current, y: current.y + 1 };
       const board = boardRef.current;
@@ -179,15 +159,17 @@ export default function TetrisGame() {
         setBoard(merged);
 
         if (cleared > 0) {
-          let points = cleared * 100;
-          if (cleared === 4) points += 600; // 💎 bonus for Tetris!
-          setScore((s) => s + points);
+          comboRef.current += 1;
+          let basePoints = cleared === 4 ? 600 : cleared * 100;
+          const comboBonus = 1 + Math.min((comboRef.current - 1) * 0.25, 1);
+          const total = Math.floor(basePoints * comboBonus);
+          setScore((s) => s + total);
 
           if (!muted) {
             clearSound.play();
             if (cleared === 4) tetrisSound.play();
           }
-        }
+        } else comboRef.current = 0;
 
         const next = nextPiece;
         if (collide(next, merged)) {
@@ -204,18 +186,16 @@ export default function TetrisGame() {
           pieceRef.current = next;
           setNextPiece(randomPiece());
         }
-      } else {
-        pieceRef.current = moved;
-      }
+      } else pieceRef.current = moved;
 
-      frame = setTimeout(tick, Math.max(150, 600 - Math.floor(score / 300) * 50));
+      frame = setTimeout(tick, speed);
     };
 
     frame = setTimeout(tick, 600);
     return () => clearTimeout(frame);
   }, [running, nextPiece, score]);
 
-  // 🎨 Render board and active piece
+  // 🎨 Rendering
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
@@ -227,26 +207,14 @@ export default function TetrisGame() {
       b.forEach((r, y) =>
         r.forEach((c, x) => {
           if (c && textures[c]?.complete)
-            ctx.drawImage(
-              textures[c],
-              x * BLOCK_SIZE,
-              y * BLOCK_SIZE,
-              BLOCK_SIZE,
-              BLOCK_SIZE
-            );
+            ctx.drawImage(textures[c], x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         })
       );
 
       p.shape.forEach((r, y) =>
         r.forEach((c, x) => {
           if (c && textures[p.color]?.complete)
-            ctx.drawImage(
-              textures[p.color],
-              (p.x + x) * BLOCK_SIZE,
-              (p.y + y) * BLOCK_SIZE,
-              BLOCK_SIZE,
-              BLOCK_SIZE
-            );
+            ctx.drawImage(textures[p.color], (p.x + x) * BLOCK_SIZE, (p.y + y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         })
       );
       requestAnimationFrame(draw);
@@ -254,17 +222,14 @@ export default function TetrisGame() {
     requestAnimationFrame(draw);
   }, [textures]);
 
-  // 🚫 Prevent page scrolling when using arrow keys
+  // 🕹️ Controls
   useEffect(() => {
     const preventScroll = (e) => {
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
-        e.preventDefault();
-      }
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) e.preventDefault();
     };
 
     const handleKey = (e) => {
       if (!running) return;
-
       const current = pieceRef.current;
       const board = boardRef.current;
 
@@ -277,35 +242,29 @@ export default function TetrisGame() {
       } else if (e.key === "ArrowDown") {
         const m = { ...current, y: current.y + 1 };
         if (!collide(m, board)) pieceRef.current = m;
+      } else if (e.key === " ") {
+        let dropY = current.y;
+        while (!collide({ ...current, y: dropY + 1 }, board)) dropY++;
+        pieceRef.current = { ...current, y: dropY };
       } else if (e.key === "ArrowUp") {
-        const rotated = current.shape[0]
-          .map((_, i) => current.shape.map((r) => r[i]))
-          .reverse();
+        const rotated = current.shape[0].map((_, i) => current.shape.map((r) => r[i])).reverse();
         const r = { ...current, shape: rotated };
         if (!collide(r, board)) {
           pieceRef.current = r;
           if (!muted) rotateSound.play();
         }
-      } else if (e.key === " ") {
-        // Instant drop
-        let m = { ...current };
-        while (!collide({ ...m, y: m.y + 1 }, board)) {
-          m.y++;
-        }
-        pieceRef.current = m;
       }
     };
 
     window.addEventListener("keydown", preventScroll, { passive: false });
     window.addEventListener("keydown", handleKey, { passive: false });
-
     return () => {
       window.removeEventListener("keydown", preventScroll);
       window.removeEventListener("keydown", handleKey);
     };
   }, [running, muted]);
 
-  // ⚖️ Dynamic scaling
+  // ⚖️ Scaling
   useEffect(() => {
     const handleResize = () => setScale(Math.min(window.innerHeight / 800, 1));
     window.addEventListener("resize", handleResize);
@@ -315,6 +274,7 @@ export default function TetrisGame() {
   const startGame = () => {
     boardRef.current = createEmptyBoard();
     pieceRef.current = randomPiece();
+    comboRef.current = 0;
     setBoard(boardRef.current);
     setNextPiece(randomPiece());
     setScore(0);
@@ -343,10 +303,10 @@ export default function TetrisGame() {
 
   const showLeaderboard = async () => {
     const data = await getLeaderboard();
-    let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\n\n";
+    let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\\n\\n";
     data.forEach((item, i) => {
       const m = i === 0 ? "🥇 " : i === 1 ? "🥈 " : i === 2 ? "🥉 " : `${i + 1}. `;
-      msg += `${m}${item.walletAddress} — ${item.score}\n`;
+      msg += `${m}${item.walletAddress} — ${item.score}\\n`;
     });
     alert(msg);
   };
@@ -375,10 +335,9 @@ export default function TetrisGame() {
       </h1>
 
       <p style={{ color: "white", textShadow: "1px 1px black" }}>
-        Use arrow keys to move and rotate blocks. Press spacebar to instantly drop!
+        Use arrow keys to move and rotate blocks, SPACE to instantly drop them.
       </p>
 
-      {/* Buttons and Game Area */}
       <div style={{ position: "absolute", top: 20, left: 20 }}>
         <button
           onClick={showLeaderboard}
@@ -459,7 +418,7 @@ export default function TetrisGame() {
         </div>
       )}
 
-      {/* Game Canvas and Score */}
+      {/* 🎮 Game Area */}
       <div
         style={{
           position: "relative",
@@ -479,6 +438,7 @@ export default function TetrisGame() {
           }}
         />
 
+        {/* 🧩 Next piece + score */}
         <div
           style={{
             position: "absolute",
@@ -509,7 +469,8 @@ export default function TetrisGame() {
           ></canvas>
         </div>
 
- {gameOver && (
+        {/* 👻 Game Over */}
+        {gameOver && (
           <div
             style={{
               position: "absolute",
