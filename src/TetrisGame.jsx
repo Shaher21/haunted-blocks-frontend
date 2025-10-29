@@ -303,10 +303,10 @@ export default function TetrisGame() {
 
   const showLeaderboard = async () => {
     const data = await getLeaderboard();
-    let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\\n\\n";
+    let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\n\n";
     data.forEach((item, i) => {
       const m = i === 0 ? "🥇 " : i === 1 ? "🥈 " : i === 2 ? "🥉 " : `${i + 1}. `;
-      msg += `${m}${item.walletAddress} — ${item.score}\\n`;
+      msg += `${m}${item.walletAddress} — ${item.score}\n`;
     });
     alert(msg);
   };
