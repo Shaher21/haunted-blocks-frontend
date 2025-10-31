@@ -303,22 +303,25 @@ export default function TetrisGame() {
 
   const showLeaderboard = async () => {
   const data = await getLeaderboard();
-
-  if (!data.length) {
-    alert("🏚️ No players yet! Be the first to score!");
+  if (!data || data.length === 0) {
+    alert("No scores yet! Be the first to play 👻");
     return;
   }
 
+  // Limit to top 20
+  const topPlayers = data.slice(0, 20);
+
+  // Header
   let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\n\n";
-  msg += "Rank   Wallet Address                 Score\n";
+  msg += "Rank | Wallet Address                | Score\n";
   msg += "---------------------------------------------\n";
 
-  data.forEach((item, i) => {
-    const rankIcon =
-      i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}. `;
-    const wallet = item.walletAddress.padEnd(42, " ");
-    const score = String(item.score).padStart(5, " ");
-    msg += `${rankIcon} ${wallet} ${score}\n`;
+  topPlayers.forEach((item, i) => {
+    const rank =
+      i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${String(i + 1).padEnd(2)}.`;
+    const wallet = item.walletAddress.padEnd(38, " ");
+    const score = String(item.score).padStart(6, " ");
+    msg += `${rank}  ${wallet}  ${score}\n`;
   });
 
   alert(msg);

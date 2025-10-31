@@ -53,11 +53,15 @@ export async function getLeaderboard() {
       all[wallet] = Number(score);
     }
 
-    return sortLeaderboard(all).slice(0, 10);
+    // Sort and return top 20 instead of top 10
+    return Object.entries(all)
+      .map(([walletAddress, score]) => ({ walletAddress, score }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20);
   } catch (err) {
     console.error("❌ Error getting leaderboard:", err);
     return [];
-  }
+    }
 }
 
 // 🔥 Admin-only: reset all scores
