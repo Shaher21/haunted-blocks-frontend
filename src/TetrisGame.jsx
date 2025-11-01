@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { saveScore, getLeaderboard, resetLeaderboard } from "./services/leaderboardService";
 
-/* Full Haunted Blocks with Combo Multiplier + Instant Drop
-   Features:
-   - Combo multipliers for consecutive clears (up to ×2)
-   - Tetris = 600 base points
-   - Instant drop with spacebar
-   - Updated how-to-play text
+/* Haunted Blocks — Combo + Instant Drop + Lines Tracking
+   - Combo multiplier (up to ×2)
+   - Tetris = 600 points
+   - Instant drop with Spacebar
+   - Tracks total lines cleared
 */
 
 const COLS = 10;
@@ -71,6 +70,7 @@ export default function TetrisGame() {
   const [running, setRunning] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
+  const [linesCleared, setLinesCleared] = useState(0);
   const [walletAddress, setWalletAddress] = useState(null);
   const [muted, setMuted] = useState(() => localStorage.getItem("muted") === "true");
   const [scale, setScale] = useState(Math.min(window.innerHeight / 800, 1));
@@ -139,7 +139,7 @@ export default function TetrisGame() {
   };
   useEffect(drawNextPiece, [nextPiece, textures]);
 
-  // 🕹️ Gravity loop with combo
+  // 🕹️ Gravity loop
   useEffect(() => {
     if (!running) return;
     let frame;
@@ -160,6 +160,7 @@ export default function TetrisGame() {
 
         if (cleared > 0) {
           comboRef.current += 1;
+          setLinesCleared((l) => l + cleared);
           let basePoints = cleared === 4 ? 600 : cleared * 100;
           const comboBonus = 1 + Math.min((comboRef.current - 1) * 0.25, 1);
           const total = Math.floor(basePoints * comboBonus);
@@ -179,7 +180,7 @@ export default function TetrisGame() {
           } else bgMusic.pause();
           setRunning(false);
           setGameOver(true);
-          if (walletAddress) saveScore(walletAddress, score);
+          if (walletAddress) saveScore(walletAddress, score, linesCleared);
           cancelAnimationFrame(frame);
           return;
         } else {
@@ -278,6 +279,7 @@ export default function TetrisGame() {
     setBoard(boardRef.current);
     setNextPiece(randomPiece());
     setScore(0);
+    setLinesCleared(0);
     setGameOver(false);
     setRunning(true);
     if (!muted) {
@@ -302,30 +304,27 @@ export default function TetrisGame() {
   };
 
   const showLeaderboard = async () => {
-  const data = await getLeaderboard();
-  if (!data || data.length === 0) {
-    alert("No scores yet! Be the first to play 👻");
-    return;
-  }
+    const data = await getLeaderboard();
+    if (!data || data.length === 0) {
+      alert("No scores yet! Be the first to play 👻");
+      return;
+    }
 
-  // Limit to top 20
-  const topPlayers = data.slice(0, 20);
+    const topPlayers = data.slice(0, 20);
+    let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\n\n";
+    msg += "Rank | Wallet Address                | Score\n";
+    msg += "----------------------------------------------\n";
 
-  // Header
-  let msg = "🎃🏆 Haunted Blocks Leaderboard 🏆👻\n\n";
-  msg += "Rank | Wallet Address                | Score\n";
-  msg += "---------------------------------------------\n";
+    topPlayers.forEach((item, i) => {
+      const rank = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${String(i + 1).padEnd(2)}.`;
+      const wallet = item.walletAddress.padEnd(38, " ");
+      const score = String(item.score).padStart(6, " ");
+      msg += `${rank}  ${wallet}  ${score}\n`;
+   });
 
-  topPlayers.forEach((item, i) => {
-    const rank =
-      i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${String(i + 1).padEnd(2)}.`;
-    const wallet = item.walletAddress.padEnd(38, " ");
-    const score = String(item.score).padStart(6, " ");
-    msg += `${rank}  ${wallet}  ${score}\n`;
-  });
 
-  alert(msg);
-};
+    alert(msg);
+  };
 
   return (
     <div
@@ -454,7 +453,7 @@ export default function TetrisGame() {
           }}
         />
 
-        {/* 🧩 Next piece + score */}
+        {/* 🧩 Score + Next */}
         <div
           style={{
             position: "absolute",
@@ -472,6 +471,7 @@ export default function TetrisGame() {
           <div style={{ color: "orange", fontSize: "18px", fontWeight: "bold" }}>
             Score: {score}
           </div>
+
 
           <canvas
             ref={nextRef}
